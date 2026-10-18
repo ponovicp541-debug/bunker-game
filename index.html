@@ -1,196 +1,230 @@
-import asyncio
-import random
-from aiogram import Bot, Dispatcher, F
-from aiogram.types import Message, CallbackQuery, InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import CommandStart
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>КАРАНТИН: ДОЗОР</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        :root {
+            --bg: #070a09;
+            --panel: #101614;
+            --green: #00ff66;
+            --red: #ff2a55;
+            --amber: #ffb700;
+            --text: #d0e8dd;
+        }
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        body {
+            margin: 0; padding: 14px;
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Courier New', Courier, monospace;
+            display: flex; flex-direction: column;
+            height: 100vh; overflow: hidden;
+        }
+        body::after {
+            content: " "; display: block;
+            position: absolute; top: 0; left: 0; bottom: 0; right: 0;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.3) 50%);
+            background-size: 100% 4px;
+            z-index: 10; pointer-events: none;
+        }
+        .hud {
+            display: flex; justify-content: space-between;
+            background: var(--panel); padding: 10px 12px;
+            border: 1px solid #23362e; border-radius: 8px;
+            font-weight: bold; font-size: 14px;
+            box-shadow: 0 0 12px rgba(0, 255, 102, 0.08);
+        }
+        .peephole-wrapper {
+            flex: 1; display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            position: relative; margin: 12px 0;
+            background: radial-gradient(circle, #16241e 0%, #040605 85%);
+            border: 2px solid #1f332a; border-radius: 16px;
+            padding: 16px; text-align: center;
+            overflow: hidden;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        .peephole-lens {
+            width: 110px; height: 110px;
+            border-radius: 50%;
+            border: 4px solid #284237;
+            display: flex; align-items: center; justify-content: center;
+            font-size: 58px; margin-bottom: 12px;
+            background: radial-gradient(circle, #0e1c16 30%, #000 100%);
+            box-shadow: inset 0 0 20px #000, 0 0 15px rgba(0, 255, 102, 0.15);
+            animation: breathe 3.5s infinite ease-in-out;
+        }
+        @keyframes breathe {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.06); }
+        }
+        .visitor-name {
+            color: var(--amber); font-weight: bold;
+            font-size: 16px; margin-bottom: 6px;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .visitor-desc {
+            font-size: 13.5px; line-height: 1.4;
+            min-height: 55px; max-width: 95%;
+        }
+        .scanner-box {
+            width: 100%; background: rgba(0, 255, 102, 0.06);
+            border-left: 3px solid var(--green);
+            padding: 8px 10px; margin-top: 10px;
+            font-size: 12.5px; text-align: left;
+            min-height: 54px; border-radius: 0 6px 6px 0;
+        }
+        .log-toast {
+            font-size: 12.5px; color: var(--amber);
+            margin-bottom: 8px; min-height: 32px;
+            display: flex; align-items: center; justify-content: center;
+        }
+        .controls { display: flex; flex-direction: column; gap: 10px; z-index: 20; }
+        .row { display: flex; gap: 10px; }
+        button {
+            flex: 1; padding: 14px 10px;
+            border: none; border-radius: 8px;
+            font-family: inherit; font-weight: bold; font-size: 14px;
+            cursor: pointer; transition: transform 0.1s, opacity 0.2s;
+            color: #fff;
+        }
+        button:active { transform: scale(0.96); }
+        button:disabled { opacity: 0.35; pointer-events: none; }
+        .btn-scan {
+            background: #172a22; border: 1px solid var(--green);
+            color: var(--green);
+        }
+        .btn-allow { background: #007a3d; border: 1px solid #00ff80; }
+        .btn-deny { background: #8a142d; border: 1px solid var(--red); }
 
-# ================= НАСТРОЙКИ =================
-TOKEN = "8849556349:AAECgBmoGzNxE6HaG5uG26CmcCnbppixbAE"
+        .overlay {
+            position: absolute; inset: 0;
+            background: rgba(5, 7, 6, 0.96);
+            display: none; flex-direction: column;
+            align-items: center; justify-content: center;
+            padding: 24px; text-align: center; z-index: 30;
+        }
+        .overlay h1 { font-size: 26px; margin-bottom: 10px; }
+        .overlay p { font-size: 15px; line-height: 1.5; margin-bottom: 24px; color: #a5c2b5; }
+    </style>
+</head>
+<body>
 
-bot = Bot(token=TOKEN)
-dp = Dispatcher()
+    <div class="hud">
+        <div id="hud-night">🌙 1/5</div>
+        <div id="hud-hp">❤️❤️❤️</div>
+        <div id="hud-morale">🧠🧠🧠</div>
+        <div id="hud-bat">🔋⚡⚡⚡</div>
+    </div>
 
-# Хранилище сессий игроков в памяти
-games = {}
+    <div class="peephole-wrapper" id="screen">
+        <div class="log-toast" id="log-box">Камера дверного шлюза активна...</div>
+        <div class="peephole-lens" id="avatar">👤</div>
+        <div class="visitor-name" id="v-name">Неизвестный</div>
+        <div class="visitor-desc" id="v-desc">Загрузка видеопотока...</div>
+        <div class="scanner-box" id="scan-data">> БИО-СКАНЕР: Ожидание команды...</div>
+    </div>
 
-# База данных "гостей"
-VISITORS = [
-    {
-        "desc": "Девушка в промокшем плаще. Руки дрожат, умоляет пустить погреться.",
-        "eyes": "Зрачки сильно расширены, белки глаз слегка желтоватые.",
-        "pulse": "42 удара в минуту (слишком низкий для паники).",
-        "is_monster": True
-    },
-    {
-        "desc": "Мужчина в куртке курьера. Тяжело дышит, прижимает к груди пустую сумку.",
-        "eyes": "Красные от лопнувших сосудов, взгляд бегает по сторонам.",
-        "pulse": "135 ударов в минуту (сильная тахикардия, чистый адреналин).",
-        "is_monster": False
-    },
-    {
-        "desc": "Пожилой сосед с верхнего этажа. Стоит абсолютно неподвижно и улыбается.",
-        "eyes": "Взгляд стеклянный. Он не моргнул ни разу за две минуты.",
-        "pulse": "Пульс не прощупывается, слышен легкий гул.",
-        "is_monster": True
-    },
-    {
-        "desc": "Подросток с разбитым фонариком. Оглядывается назад в темноту коридора.",
-        "eyes": "Обычные карие глаза, полные слез.",
-        "pulse": "110 ударов в минуту (умеренный испуг).",
-        "is_monster": False
-    },
-    {
-        "desc": "Женщина в форме врача. Говорит ровным, спокойным голосом, предлагает аптечку.",
-        "eyes": "Зрачки вертикальные при свете лампы, но быстро принимают обычную форму.",
-        "pulse": "18 ударов в минуту.",
-        "is_monster": True
-    },
-    {
-        "desc": "Парень в порванной толстовке. На щеке царапина, стучит кулаком в дверь.",
-        "eyes": "Зрачки сужены от света твоего фонаря, щурится.",
-        "pulse": "125 ударов в минуту.",
-        "is_monster": False
+    <div class="controls">
+        <div class="row">
+            <button class="btn-scan" id="btn-eyes" onclick="scan('eyes')">👁 Глаза (-1⚡)</button>
+            <button class="btn-scan" id="btn-pulse" onclick="scan('pulse')">💓 Пульс (-1⚡)</button>
+        </div>
+        <div class="row">
+            <button class="btn-allow" onclick="decide(true)">🚪 ВПУСТИТЬ</button>
+            <button class="btn-deny" onclick="decide(false)">🔫 ПРОГНАТЬ</button>
+        </div>
+    </div>
+
+    <div class="overlay" id="overlay">
+        <h1 id="end-title">КОНЕЦ СМЕНЫ</h1>
+        <p id="end-desc"></p>
+        <button class="btn-scan" style="flex:0; width: 220px; padding:16px;" onclick="initGame()">🔄 НОВАЯ СМЕНА</button>
+    </div>
+
+<script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+    tg.ready();
+
+    function vibrate(type) {
+        if (!tg.HapticFeedback) return;
+        if (type === 'error' || type === 'success' || type === 'warning') {
+            tg.HapticFeedback.notificationOccurred(type);
+        } else {
+            tg.HapticFeedback.impactOccurred(type);
+        }
     }
-]
 
-def new_game(user_id: int):
-    games[user_id] = {
-        "hp": 3,          # Здоровье
-        "morale": 3,      # Мораль (рассудок)
-        "battery": 3,     # Заряд сканера
-        "night": 1,       # Текущий гость (нужно пережить 5)
-        "visitor": random.choice(VISITORS),
-        "inspected": []
+    const VISITORS = [
+        {
+            icon: "🌧️", name: "Девушка в дождевике",
+            desc: "Руки сильно дрожат, умоляет пустить погреться хотя бы на час.",
+            eyes: "Зрачки расширены во всю радужку, белки желтоватые.",
+            pulse: "38 уд/мин (аномально низкий для паники).",
+            monster: true
+        },
+        {
+            icon: "📦", name: "Курьер с рюкзаком",
+            desc: "Тяжело дышит, прижимает к груди пустую термосумку, оглядывается.",
+            eyes: "Красные от лопнувших сосудов, бегающий испуганный взгляд.",
+            pulse: "138 уд/мин (сильная тахикардия, выброс адреналина).",
+            monster: false
+        },
+        {
+            icon: "👴", name: "Сосед с 4 этажа",
+            desc: "Стоит абсолютно неподвижно перед камерой и широко улыбается.",
+            eyes: "Стеклянный взгляд. Не моргнул ни разу за 2 минуты.",
+            pulse: "Пульс не читается. Датчик ловит низкочастотный гул.",
+            monster: true
+        },
+        {
+            icon: "🔦", name: "Подросток с фонариком",
+            desc: "Разбитый фонарь мигает. Плачет и просит спрятать от кого-то в коридоре.",
+            eyes: "Обычные карие глаза, зрачки нормально реагируют на свет.",
+            pulse: "115 уд/мин (умеренный испуг).",
+            monster: false
+        },
+        {
+            icon: "🩺", name: "Женщина в халате врача",
+            desc: "Говорит идеально ровным голосом, предлагает медикаменты в обмен на ночлег.",
+            eyes: "Секундное вертикальное сужение зрачка при вспышке камеры.",
+            pulse: "16 уд/мин (температура тела близка к комнатной).",
+            monster: true
+        },
+        {
+            icon: "🤕", name: "Парень в рваной худи",
+            desc: "На щеке свежая ссадина, отчаянно стучит кулаком по обшивке двери.",
+            eyes: "Щурится от прожектора камеры, реакция зрачков в норме.",
+            pulse: "128 уд/мин (высокий стресс).",
+            monster: false
+        }
+    ];
+
+    let state = {};
+
+    function initGame() {
+        vibrate('light');
+        const pool = [...VISITORS].sort(() => Math.random() - 0.5);
+        state = {
+            hp: 3, morale: 3, bat: 3, night: 1, maxNights: 5,
+            pool: pool, current: pool[0], scanned: []
+        };
+        document.getElementById('overlay').style.display = 'none';
+        document.getElementById('log-box').innerText = "Камера дверного шлюза активна...";
+        render();
     }
 
-def get_keyboard(user_id: int) -> InlineKeyboardMarkup:
-    game = games[user_id]
-    buttons = []
+    function render() {
+        document.getElementById('hud-night').innerText = `🌙 ${state.night}/${state.maxNights}`;
+        document.getElementById('hud-hp').innerText = '❤️'.repeat(state.hp) || '💀';
+        document.getElementById('hud-morale').innerText = '🧠'.repeat(state.morale) || '🌀';
+        document.getElementById('hud-bat').innerText = '🔋' + ('⚡'.repeat(state.bat) || '0');
+
+        const v = state.current;
+        document.getElementById('avatar').innerText = v.icon;
+        document.getElementById('v-name
     
-    # Кнопки проверок (тратят батарею)
-    if game["battery"] > 0:
-        check_row = []
-        if "eyes" not in game["inspected"]:
-            check_row.append(InlineKeyboardButton(text="👁 Глаза (-1🔋)", callback_data="check_eyes"))
-        if "pulse" not in game["inspected"]:
-            check_row.append(InlineKeyboardButton(text="💓 Пульс (-1🔋)", callback_data="check_pulse"))
-        if check_row:
-            buttons.append(check_row)
-            
-    # Основные решения
-    buttons.append([
-        InlineKeyboardButton(text="🚪 Впустить", callback_data="act_allow"),
-        InlineKeyboardButton(text="🔫 Прогнать", callback_data="act_deny")
-    ])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-def render_screen(user_id: int, log_text: str = "") -> str:
-    g = games[user_id]
-    v = g["visitor"]
-    
-    status = (
-        f"🌙 **Гость #{g['night']} из 5**\n"
-        f"❤️ Жизни: {'❤️' * g['hp']} | 🧠 Рассудок: {'🔹' * g['morale']} | 🔋 Заряд: {'⚡' * g['battery']}\n"
-        f"— — — — — — — — — —\n"
-    )
-    
-    if log_text:
-        status += f"_{log_text}_\n\n"
-        
-    status += f"👀 **За дверью:**\n{v['desc']}\n"
-    
-    if "eyes" in g["inspected"]:
-        status += f"\n👁 **Осмотр глаз:** {v['eyes']}"
-    if "pulse" in g["inspected"]:
-        status += f"\n💓 **Датчик пульса:** {v['pulse']}"
-        
-    return status
-
-# ================= ОБРАБОТЧИКИ =================
-
-@dp.message(CommandStart())
-async def start_cmd(message: Message):
-    user_id = message.from_user.id
-    new_game(user_id)
-    text = (
-        "🚨 **КАРАНТИН: НОЧНОЙ ДОЗОР**\n\n"
-        "В городе аномалия. Твари копируют облик людей и стучатся в двери. "
-        "Используй сканер (🔋), чтобы проверить глаза и пульс гостя, и реши его судьбу.\n\n"
-    ) + render_screen(user_id)
-    
-    await message.answer(text, reply_markup=get_keyboard(user_id), parse_mode="Markdown")
-
-@dp.callback_query(F.data.startswith("check_"))
-async def check_handler(call: CallbackQuery):
-    user_id = call.from_user.id
-    if user_id not in games:
-        new_game(user_id)
-        
-    g = games[user_id]
-    check_type = call.data.split("_")[1]
-    
-    if g["battery"] > 0 and check_type not in g["inspected"]:
-        g["battery"] -= 1
-        g["inspected"].append(check_type)
-        
-    await call.message.edit_text(
-        render_screen(user_id),
-        reply_markup=get_keyboard(user_id),
-        parse_mode="Markdown"
-    )
-    await call.answer()
-
-@dp.callback_query(F.data.startswith("act_"))
-async def action_handler(call: CallbackQuery):
-    user_id = call.from_user.id
-    if user_id not in games:
-        new_game(user_id)
-        
-    g = games[user_id]
-    v = g["visitor"]
-    action = call.data.split("_")[1]
-    
-    log = ""
-    if action == "allow":
-        if v["is_monster"]:
-            g["hp"] -= 1
-            log = "🩸 ТЫ ОШИБСЯ! Это был мимик. Он ранил тебя перед тем, как ты захлопнул внутренний шлюз (-1 ❤️)."
-        else:
-            g["battery"] = min(3, g["battery"] + 1)
-            log = "✅ Ты спас человека! В благодарность он отдал тебе батарейку (+1 🔋)."
-    elif action == "deny":
-        if v["is_monster"]:
-            log = "🔥 В яблочко! Услышав щелчок затвора, тварь неестественно выгнулась и уползла в темноту."
-        else:
-            g["morale"] -= 1
-            log = "😨 Это был обычный человек... Слышно, как в темноте коридора за ним кто-то гонится (-1 🧠)."
-
-    # Проверка условий конца игры
-    if g["hp"] <= 0:
-        await call.message.edit_text(f"{log}\n\n💀 **ИГРА ОКОНЧЕНА**\nТвоя защита пробита. Нажми /start, чтобы попробовать снова.", parse_mode="Markdown")
-        return
-    if g["morale"] <= 0:
-        await call.message.edit_text(f"{log}\n\n🌀 **ИГРА ОКОНЧЕНА**\nЧувство вины свело тебя с ума. Нажми /start для рестарта.", parse_mode="Markdown")
-        return
-    if g["night"] >= 5:
-        await call.message.edit_text(f"{log}\n\n🌅 **ПОБЕДА!**\nНаступил рассвет. Ты пережил эту смену и сохранил убежище! Нажми /start для новой смены.", parse_mode="Markdown")
-        return
-
-    # Переход к следующему гостю
-    g["night"] += 1
-    g["visitor"] = random.choice(VISITORS)
-    g["inspected"] = []
-    
-    await call.message.edit_text(
-        render_screen(user_id, log),
-        reply_markup=get_keyboard(user_id),
-        parse_mode="Markdown"
-    )
-    await call.answer()
-
-async def main():
-    print("Бот запущен! Открой его в Telegram и нажми /start")
-    await dp.start_polling(bot)
-
-if __name__ == "__main__":
-    asyncio.run(main())
