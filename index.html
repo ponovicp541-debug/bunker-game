@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" translate="no">
 <head>
     <meta charset="UTF-8">
+    <meta name="google" content="notranslate">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>КАРАНТИН: ДОЗОР</title>
+    <title>БУНКЕР N7</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <style>
         :root {
@@ -14,7 +15,7 @@
             --amber: #ffb700;
             --text: #d0e8dd;
         }
-        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; }
+        * { box-sizing: border-box; user-select: none; -webkit-user-select: none; -webkit-tap-highlight-color: transparent; }
         body {
             margin: 0; padding: 14px;
             background-color: var(--bg);
@@ -82,36 +83,33 @@
             margin-bottom: 8px; min-height: 32px;
             display: flex; align-items: center; justify-content: center;
         }
-        .controls { display: flex; flex-direction: column; gap: 10px; z-index: 20; }
+        .controls { display: flex; flex-direction: column; gap: 10px; z-index: 20; position: relative; }
         .row { display: flex; gap: 10px; }
         button {
             flex: 1; padding: 14px 10px;
             border: none; border-radius: 8px;
             font-family: inherit; font-weight: bold; font-size: 14px;
             cursor: pointer; transition: transform 0.1s, opacity 0.2s;
-            color: #fff;
+            color: #fff; touch-action: manipulation;
         }
-        button:active { transform: scale(0.96); }
+        button:active { transform: scale(0.95); }
         button:disabled { opacity: 0.35; pointer-events: none; }
-        .btn-scan {
-            background: #172a22; border: 1px solid var(--green);
-            color: var(--green);
-        }
+        .btn-scan { background: #172a22; border: 1px solid var(--green); color: var(--green); }
         .btn-allow { background: #007a3d; border: 1px solid #00ff80; }
         .btn-deny { background: #8a142d; border: 1px solid var(--red); }
 
         .overlay {
-            position: absolute; inset: 0;
+            position: fixed; inset: 0;
             background: rgba(5, 7, 6, 0.96);
             display: none; flex-direction: column;
             align-items: center; justify-content: center;
-            padding: 24px; text-align: center; z-index: 30;
+            padding: 24px; text-align: center; z-index: 50;
         }
         .overlay h1 { font-size: 26px; margin-bottom: 10px; }
         .overlay p { font-size: 15px; line-height: 1.5; margin-bottom: 24px; color: #a5c2b5; }
     </style>
 </head>
-<body>
+<body class="notranslate">
 
     <div class="hud">
         <div id="hud-night">🌙 1/5</div>
@@ -122,41 +120,44 @@
 
     <div class="peephole-wrapper" id="screen">
         <div class="log-toast" id="log-box">Камера дверного шлюза активна...</div>
-        <div class="peephole-lens" id="avatar">👤</div>
-        <div class="visitor-name" id="v-name">Неизвестный</div>
-        <div class="visitor-desc" id="v-desc">Загрузка видеопотока...</div>
-        <div class="scanner-box" id="scan-data">> БИО-СКАНЕР: Ожидание команды...</div>
+        <div class="peephole-lens" id="avatar">🌧️</div>
+        <div class="visitor-name" id="v-name">Девушка в дождевике</div>
+        <div class="visitor-desc" id="v-desc">Руки сильно дрожат, умоляет пустить погреться хотя бы на час.</div>
+        <div class="scanner-box" id="scan-data">&gt; БИО-СКАНЕР: Готов к проверке...</div>
     </div>
 
     <div class="controls">
         <div class="row">
-            <button class="btn-scan" id="btn-eyes" onclick="scan('eyes')">👁 Глаза (-1⚡)</button>
-            <button class="btn-scan" id="btn-pulse" onclick="scan('pulse')">💓 Пульс (-1⚡)</button>
+            <button type="button" class="btn-scan" id="btn-eyes" onclick="window.scan('eyes')">👁 Глаза (-1⚡)</button>
+            <button type="button" class="btn-scan" id="btn-pulse" onclick="window.scan('pulse')">💓 Пульс (-1⚡)</button>
         </div>
         <div class="row">
-            <button class="btn-allow" onclick="decide(true)">🚪 ВПУСТИТЬ</button>
-            <button class="btn-deny" onclick="decide(false)">🔫 ПРОГНАТЬ</button>
+            <button type="button" class="btn-allow" onclick="window.decide(true)">🚪 ВПУСТИТЬ</button>
+            <button type="button" class="btn-deny" onclick="window.decide(false)">🔫 ПРОГНАТЬ</button>
         </div>
     </div>
 
     <div class="overlay" id="overlay">
         <h1 id="end-title">КОНЕЦ СМЕНЫ</h1>
         <p id="end-desc"></p>
-        <button class="btn-scan" style="flex:0; width: 220px; padding:16px;" onclick="initGame()">🔄 НОВАЯ СМЕНА</button>
+        <button type="button" class="btn-scan" style="flex:0; width: 220px; padding:16px;" onclick="window.initGame()">🔄 НОВАЯ СМЕНА</button>
     </div>
 
 <script>
-    const tg = window.Telegram.WebApp;
-    tg.expand();
-    tg.ready();
+    const tg = (window.Telegram && window.Telegram.WebApp) ? window.Telegram.WebApp : null;
+    if (tg) {
+        try { tg.expand(); tg.ready(); } catch (e) {}
+    }
 
     function vibrate(type) {
-        if (!tg.HapticFeedback) return;
-        if (type === 'error' || type === 'success' || type === 'warning') {
-            tg.HapticFeedback.notificationOccurred(type);
-        } else {
-            tg.HapticFeedback.impactOccurred(type);
-        }
+        try {
+            if (!tg || !tg.HapticFeedback) return;
+            if (type === 'error' || type === 'success' || type === 'warning') {
+                tg.HapticFeedback.notificationOccurred(type);
+            } else {
+                tg.HapticFeedback.impactOccurred(type);
+            }
+        } catch (e) {}
     }
 
     const VISITORS = [
@@ -206,7 +207,7 @@
 
     let state = {};
 
-    function initGame() {
+    window.initGame = function() {
         vibrate('light');
         const pool = [...VISITORS].sort(() => Math.random() - 0.5);
         state = {
@@ -216,15 +217,97 @@
         document.getElementById('overlay').style.display = 'none';
         document.getElementById('log-box').innerText = "Камера дверного шлюза активна...";
         render();
-    }
+    };
 
     function render() {
-        document.getElementById('hud-night').innerText = `🌙 ${state.night}/${state.maxNights}`;
+        document.getElementById('hud-night').innerText = "🌙 " + state.night + "/" + state.maxNights;
         document.getElementById('hud-hp').innerText = '❤️'.repeat(state.hp) || '💀';
         document.getElementById('hud-morale').innerText = '🧠'.repeat(state.morale) || '🌀';
         document.getElementById('hud-bat').innerText = '🔋' + ('⚡'.repeat(state.bat) || '0');
 
         const v = state.current;
         document.getElementById('avatar').innerText = v.icon;
-        document.getElementById('v-name
-    
+        document.getElementById('v-name').innerText = v.name;
+        document.getElementById('v-desc').innerText = v.desc;
+
+        let scanHtml = "";
+        if (state.scanned.includes('eyes')) scanHtml += "<div>👁 <b>Глаза:</b> " + v.eyes + "</div>";
+        if (state.scanned.includes('pulse')) scanHtml += "<div>💓 <b>Пульс:</b> " + v.pulse + "</div>";
+        document.getElementById('scan-data').innerHTML = scanHtml || "&gt; БИО-СКАНЕР: Готов к проверке...";
+
+        document.getElementById('btn-eyes').disabled = state.bat <= 0 || state.scanned.includes('eyes');
+        document.getElementById('btn-pulse').disabled = state.bat <= 0 || state.scanned.includes('pulse');
+    }
+
+    window.scan = function(type) {
+        if (state.bat <= 0 || state.scanned.includes(type)) return;
+        vibrate('medium');
+        state.bat--;
+        state.scanned.push(type);
+        render();
+    };
+
+    function flashScreen(color) {
+        const scr = document.getElementById('screen');
+        scr.style.borderColor = color;
+        scr.style.boxShadow = "0 0 25px " + color;
+        setTimeout(() => {
+            scr.style.borderColor = '#1f332a';
+            scr.style.boxShadow = 'none';
+        }, 450);
+    }
+
+    window.decide = function(allow) {
+        const v = state.current;
+        let msg = "";
+
+        if (allow) {
+            if (v.monster) {
+                state.hp--;
+                vibrate('error');
+                flashScreen('#ff2a55');
+                msg = "🩸 ОШИБКА! Это был мимик. Он ранил тебя в шлюзе (-1 ❤️)";
+            } else {
+                state.bat = Math.min(3, state.bat + 1);
+                vibrate('success');
+                flashScreen('#00ff66');
+                msg = "✅ Выживший спасен! Он поделился батарейкой (+1 ⚡)";
+            }
+        } else {
+            if (v.monster) {
+                vibrate('success');
+                flashScreen('#00ff66');
+                msg = "🔥 Точно! Тварь зашипела и уползла в вентиляцию.";
+            } else {
+                state.morale--;
+                vibrate('warning');
+                flashScreen('#ffb700');
+                msg = "😨 Ты прогнал человека... Слышны крики в темноте (-1 🧠)";
+            }
+        }
+
+        document.getElementById('log-box').innerText = msg;
+
+        if (state.hp <= 0) return endGame("💀 ЗАЩИТА ПРОБИТА", "Ты впустил слишком много тварей в бункер. Дозор окончен.", "#ff2a55");
+        if (state.morale <= 0) return endGame("🌀 ПОТЕРЯ РАССУДКА", "Чувство вины за погибших людей сломало тебя.", "#ffb700");
+        if (state.night >= state.maxNights) return endGame("🌅 РАССВЕТ НАСТУПИЛ!", "Ты вычислил мимиков, спас людей и пережил эту смену!", "#00ff66");
+
+        state.night++;
+        state.current = state.pool[state.night - 1];
+        state.scanned = [];
+        render();
+    };
+
+    function endGame(title, desc, color) {
+        const ov = document.getElementById('overlay');
+        const h1 = document.getElementById('end-title');
+        h1.innerText = title;
+        h1.style.color = color;
+        document.getElementById('end-desc').innerText = desc;
+        ov.style.display = 'flex';
+    }
+
+    window.initGame();
+</script>
+</body>
+</html>
